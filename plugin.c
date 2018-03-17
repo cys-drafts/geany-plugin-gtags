@@ -181,13 +181,21 @@ static void menu_enable(gboolean enable)
 }
 static gboolean kb_callback(guint key_id)
 {
+	find_type_t ft = key_id;
+
 	switch (key_id)	{
 		case FIND_DEF:
 		case FIND_REF:
-		case FIND_FILE:
 		case FIND_SYM:
 		{
-			find_type_t ft = key_id;
+			gchar *word = get_current_word();
+			if (word)
+				gtk_entry_set_text(GTK_ENTRY(find_dialog.entry), word);
+			input_cb(ft);
+			return TRUE;
+		}
+		case FIND_FILE:
+		{
 			on_find(NULL, (gpointer)ft);
 			return TRUE;
 		}

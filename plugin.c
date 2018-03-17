@@ -66,13 +66,19 @@ static void find_dialog_hide(void)
 	gtk_entry_set_text(GTK_ENTRY(find_dialog.entry), "");
 	gtk_widget_hide(find_dialog.widget);
 }
+void enter_cb(GtkEntry *entry, gpointer user_data)
+{
+	gtk_dialog_response(GTK_DIALOG(find_dialog.widget), GTK_RESPONSE_ACCEPT);
+}
 static void find_dialog_create(void)
 {
 	find_dialog.widget = gtk_dialog_new_with_buttons("Gtags", GTK_WINDOW(geany->main_widgets->window), GTK_DIALOG_DESTROY_WITH_PARENT,
 			"Cancel", GTK_RESPONSE_CANCEL, "Ok", GTK_RESPONSE_ACCEPT, NULL);
 	GtkWidget *vbox = ui_dialog_vbox_new(GTK_DIALOG(find_dialog.widget));
 	GtkWidget *entry = gtk_entry_new();
+
 	gtk_entry_set_max_length(GTK_ENTRY(entry), 60);
+	g_signal_connect(GTK_WIDGET(entry), "activate", G_CALLBACK(enter_cb), NULL);
 
 	find_dialog.entry = entry;
 
@@ -154,9 +160,9 @@ static void show_find_dialog(find_type_t ft)
 		if (word)
 			gtk_entry_set_text(GTK_ENTRY(find_dialog.entry), word);
 	}
+	gtk_widget_grab_focus(GTK_WIDGET(find_dialog.entry));
 	gint res = gtk_dialog_run(GTK_DIALOG(find_dialog.widget));
-	if (res == GTK_RESPONSE_ACCEPT)
-	{
+	if (res == GTK_RESPONSE_ACCEPT) {
 		input_cb(ft);
 	}
 	find_dialog_hide();

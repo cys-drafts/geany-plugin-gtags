@@ -1,6 +1,7 @@
 #include "gtags.h"
 
 static GeanyData *geany_data;
+static GeanyPlugin *geany_plugin;
 
 #define geany_project_menu	(geany->main_widgets->project_menu)
 
@@ -178,9 +179,26 @@ static void menu_enable(gboolean enable)
 	gtk_widget_set_sensitive(menu_find_sym, enable);
 	gtk_widget_set_sensitive(menu_find_file, enable);
 }
+static gboolean kb_callback(guint key_id)
+{
+	switch (key_id)	{
+		case FIND_DEF:
+		case FIND_REF:
+		case FIND_FILE:
+		case FIND_SYM:
+		{
+			find_type_t ft = key_id;
+			on_find(NULL, (gpointer)ft);
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
 static void menu_init(void)
 {
 	//printf("setup menus\n");
+
+	GeanyKeyGroup *key_group = plugin_set_key_group(geany_plugin, "Gtags", FIND_N, kb_callback);
 
 	menu_sep = gtk_separator_menu_item_new();
 	gtk_widget_show(menu_sep);
@@ -190,21 +208,25 @@ static void menu_init(void)
 	gtk_widget_show(menu_find_def);
 	gtk_container_add(GTK_CONTAINER(geany_project_menu), menu_find_def);
 	g_signal_connect(menu_find_def, "activate", G_CALLBACK(on_find), (gpointer)FIND_DEF);
+	keybindings_set_item(key_group, FIND_DEF, NULL, 0, 0, "find_def", "Find Def", menu_find_def);
 
 	menu_find_ref = gtk_menu_item_new_with_mnemonic("Find Ref");
 	gtk_widget_show(menu_find_ref);
 	gtk_container_add(GTK_CONTAINER(geany_project_menu), menu_find_ref);
 	g_signal_connect(menu_find_ref, "activate", G_CALLBACK(on_find), (gpointer)FIND_REF);
+	keybindings_set_item(key_group, FIND_REF, NULL, 0, 0, "find_ref", "Find Ref", menu_find_ref);
 
 	menu_find_sym = gtk_menu_item_new_with_mnemonic("Find Symbol");
 	gtk_widget_show(menu_find_sym);
 	gtk_container_add(GTK_CONTAINER(geany_project_menu), menu_find_sym);
 	g_signal_connect(menu_find_sym, "activate", G_CALLBACK(on_find), (gpointer)FIND_SYM);
+	keybindings_set_item(key_group, FIND_SYM, NULL, 0, 0, "find_symbol", "Find Symbol", menu_find_sym);
 
 	menu_find_file = gtk_menu_item_new_with_mnemonic("Find file");
 	gtk_widget_show(menu_find_file);
 	gtk_container_add(GTK_CONTAINER(geany_project_menu), menu_find_file);
 	g_signal_connect(menu_find_file, "activate", G_CALLBACK(on_find), (gpointer)FIND_FILE);
+	keybindings_set_item(key_group, FIND_FILE, NULL, 0, 0, "find_file", "Find File", menu_find_file);
 
 	menu_enable(FALSE);
 }
@@ -223,6 +245,7 @@ static gboolean gtags_init(GeanyPlugin *plugin, gpointer pdata)
 	//printf("niceday\n");
 
 	geany_data = plugin->geany_data;
+	geany_plugin = plugin;
 
 	menu_init();
 

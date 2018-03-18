@@ -4,9 +4,9 @@
 static struct {
 	GPid pid;
 	GSList *result;
+	const gchar *global_path;
 } runtime = { 0, NULL };
 
-#define GLOBAL_PATH	"/usr/local/bin/global"
 #define CALL_FLAGS	(SPAWN_ASYNC | SPAWN_LINE_BUFFERED)
 
 static void tag_free(gpointer data)
@@ -129,10 +129,15 @@ void global_find(gchar *rootdir, const gchar *extra_arg, const gchar *text, void
 
 	runtime_reset();
 
-	gboolean res = spawn_with_callbacks(rootdir, GLOBAL_PATH, argv, NULL, CALL_FLAGS, NULL, NULL,
+	gboolean res = spawn_with_callbacks(rootdir, runtime.global_path, argv, NULL, CALL_FLAGS, NULL, NULL,
 		(ft == FIND_FILE)?file_stdout_cb:tag_stdout_cb, NULL, 0, stderr_cb, NULL, 0,
 		(ft == FIND_FILE)?file_exit_cb:tag_exit_cb, cb, &runtime.pid, NULL);
 	if (!res) {
 		//printf("exec failed\n");
 	}
+}
+
+void global_set(const gchar *path)
+{
+	runtime.global_path = path;
 }

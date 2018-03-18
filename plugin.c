@@ -1,4 +1,5 @@
 #include "gtags.h"
+#include <glib/gstdio.h>
 
 static GeanyData *geany_data;
 static GeanyPlugin *geany_plugin;
@@ -12,9 +13,77 @@ static gchar *project_rootdir;
 static struct {
 	GtkWidget *widget;
 	GtkWidget *entry;
-} find_dialog = {NULL, NULL};
+} find_dialog = { NULL, NULL };
+
+static struct {
+	const gchar *global_path;
+	const gchar *configfile;
+	gchar *configdir;
+	GtkWidget *entry;
+} config = { NULL, NULL };
 
 static void menu_enable(gboolean enable);
+
+static gboolean config_may_create(void)
+{
+	//printf("config_may_create\n");
+
+	config.configdir = geany->app->configdir;
+
+	gboolean ret = TRUE;
+	GString *pref = g_string_new("");
+
+	if (g_file_test(config.configdir, G_FILE_TEST_EXISTS) != TRUE) {
+		g_mkdir(config.configdir, 0755);
+	}
+	g_string_printf(pref, "%s/plugins", config.configdir);
+	if (g_file_test(pref->str, G_FILE_TEST_EXISTS) != TRUE) {
+		g_mkdir(pref->str, 0755);
+	}
+	if (g_file_test(pref->str, G_FILE_TEST_IS_DIR) == TRUE) {
+		g_string_append_c(pref, '/');
+		g_string_append(pref, "gtags");
+		if (g_file_test(pref->str, G_FILE_TEST_EXISTS) != TRUE) {
+			FILE *fp = g_fopen(pref->str, "w");
+			if (fp) {
+				fclose(fp);
+			} else {
+				printf("failed to create config file\n");
+				ret = FALSE;
+			}
+		}
+	}
+
+	config.configfile = g_string_free(pref, FALSE);
+
+	return ret;
+}
+static void config_load(void)
+{
+	//printf("config_load\n");
+
+	GKeyFile *conf = g_key_file_new();
+	if (g_key_file_load_from_file(conf, config.configfile, G_KEY_FILE_NONE, NULL) == FALSE) {
+		printf("failed to load config file: %s\n", config.configfile);
+		return;
+	}
+	config.global_path = g_key_file_get_string(conf, "gtags", "global_path", NULL);
+	if (!config.global_path) {
+		config.global_path = g_strdup(GLOBAL_PATH_DEFAULT);
+		g_key_file_set_string(conf, "gtags", "global_path", config.global_path);
+		g_key_file_save_to_file(conf, config.configfile, NULL);
+	}
+	g_key_file_free(conf);
+}
+static void config_save(void)
+{
+	//printf("config_save\n");
+
+	GKeyFile *conf = g_key_file_new();
+	g_key_file_set_string(conf, "gtags", "global_path", config.global_path);
+	g_key_file_save_to_file(conf, config.configfile, NULL);
+	g_key_file_free(conf);
+}
 
 /* utf8 */
 static gchar *get_project_base_path(void)
@@ -129,10 +198,8 @@ void show_tag(gpointer data, gpointer user_data)
 }
 void input_cb(find_type_t ft)
 {
-	GtkEntryBuffer *buffer = gtk_entry_get_buffer(GTK_ENTRY(find_dialog.entry));
-	gchar *txt = (gchar *)gtk_entry_buffer_get_text(buffer);
+	const gchar *txt = gtk_entry_get_text(GTK_ENTRY(find_dialog.entry));
 
-	g_strstrip(txt);
 	if (!txt || !strcmp(txt, ""))
 		return;
 
@@ -256,6 +323,11 @@ static gboolean gtags_init(GeanyPlugin *plugin, gpointer pdata)
 	geany_plugin = plugin;
 
 	menu_init();
+	if (config_may_create() == FALSE) {
+		return FALSE;
+	}
+	config_load();
+	global_set(config.global_path);
 
 	return TRUE;
 }
@@ -264,7 +336,46 @@ static void gtags_cleanup(GeanyPlugin *plugin, gpointer pdata)
 {
 	//printf("byebye\n");
 
+	config_save();
+	g_free((gchar *)config.configfile);
+	g_free((gchar *)config.global_path);
 	menu_clean();
+}
+
+static GtkWidget *gtags_config_ui(void)
+{
+	GtkWidget *hbox = gtk_hbox_new(FALSE, 6);
+
+	GtkWidget *label = gtk_label_new("Where is global");
+	GtkWidget *entry = gtk_entry_new();
+	config.entry = entry;
+	gtk_entry_set_text(GTK_ENTRY(entry), config.global_path);
+	gtk_box_pack_start(GTK_BOX(hbox), label, FALSE, TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(hbox), entry, TRUE, TRUE, 0);
+	gtk_widget_show_all(hbox);
+	return hbox;
+}
+
+static void update_global_path(void)
+{
+	g_free((gchar *)config.global_path);
+	config.global_path = g_strdup(gtk_entry_get_text(GTK_ENTRY(config.entry)));
+	config_save();
+	global_set(config.global_path);
+}
+
+static void config_cb(GtkDialog *dialog, gint response, gpointer user_data)
+{
+	if (response == GTK_RESPONSE_OK || response == GTK_RESPONSE_APPLY) {
+		//printf("global: %s\n", gtk_entry_get_text(GTK_ENTRY(config.entry)));
+		update_global_path();
+	}
+}
+
+static GtkWidget *gtags_config(GeanyPlugin *plugin, GtkDialog *dialog, gpointer pdata)
+{
+	g_signal_connect(dialog, "response", G_CALLBACK(config_cb), NULL);
+	return gtags_config_ui();
 }
 
 G_MODULE_EXPORT
@@ -277,6 +388,7 @@ void geany_load_module(GeanyPlugin *plugin)
 
 	plugin->funcs->init = gtags_init;
 	plugin->funcs->cleanup = gtags_cleanup;
+	plugin->funcs->configure = gtags_config;
 	plugin->funcs->callbacks = signal_cbs;
 
 	GEANY_PLUGIN_REGISTER(plugin, 235);

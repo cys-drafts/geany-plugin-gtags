@@ -6,13 +6,16 @@ static GeanyPlugin *geany_plugin;
 
 #define geany_project_menu	(geany->main_widgets->project_menu)
 
-static GtkWidget *menu_sep, *menu_find_file, *menu_find_def, *menu_find_ref, *menu_find_sym;
+static GtkWidget *menu_sep, *menu_find_file, *menu_find_def, *menu_find_ref, *menu_find_sym, *menu_find_any;
 
 static gchar *project_rootdir;
 
 static struct {
 	GtkWidget *widget;
 	GtkWidget *entry;
+	GtkWidget *radiobox;
+	GtkToggleButton *first_button;
+	find_type_t ft;
 } find_dialog = { NULL, NULL };
 
 static struct {
@@ -136,24 +139,50 @@ static void find_dialog_hide(void)
 	gtk_entry_set_text(GTK_ENTRY(find_dialog.entry), "");
 	gtk_widget_hide(find_dialog.widget);
 }
-void enter_cb(GtkEntry *entry, gpointer user_data)
+static void enter_cb(GtkEntry *entry, gpointer user_data)
 {
 	gtk_dialog_response(GTK_DIALOG(find_dialog.widget), GTK_RESPONSE_ACCEPT);
+}
+static void radio_cb(GtkToggleButton *togglebutton, gpointer user_data)
+{
+    if (gtk_toggle_button_get_active(togglebutton)) {
+		//printf("button %p selected\n", user_data);
+        find_dialog.ft = (find_type_t)user_data;
+    }
 }
 static void find_dialog_create(void)
 {
 	find_dialog.widget = gtk_dialog_new_with_buttons("Gtags", GTK_WINDOW(geany->main_widgets->window), GTK_DIALOG_DESTROY_WITH_PARENT,
 			"Cancel", GTK_RESPONSE_CANCEL, "Ok", GTK_RESPONSE_ACCEPT, NULL);
 	GtkWidget *vbox = ui_dialog_vbox_new(GTK_DIALOG(find_dialog.widget));
+	GtkWidget *hbox = gtk_hbox_new(FALSE, 2);
 	GtkWidget *entry = gtk_entry_new();
 
 	gtk_entry_set_max_length(GTK_ENTRY(entry), 60);
 	g_signal_connect(GTK_WIDGET(entry), "activate", G_CALLBACK(enter_cb), NULL);
 
 	find_dialog.entry = entry;
+	find_dialog.radiobox = hbox;
 
 	gtk_box_pack_start(GTK_BOX(vbox), entry, FALSE, TRUE, 0);
-	gtk_widget_set_size_request(GTK_WIDGET(vbox), 300, 50);
+	gtk_widget_set_size_request(GTK_WIDGET(vbox), 400, 80);
+
+	GtkWidget *def_radio, *ref_radio, *sym_radio, *file_radio;
+	def_radio = gtk_radio_button_new_with_label(NULL, "Def");
+	find_dialog.first_button = GTK_TOGGLE_BUTTON(def_radio);
+	ref_radio = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(def_radio), "Ref");
+	sym_radio = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(def_radio), "Sym");
+	file_radio = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(def_radio), "File");
+	gtk_box_pack_start(GTK_BOX(hbox), def_radio, FALSE, TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(hbox), ref_radio, FALSE, TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(hbox), sym_radio, FALSE, TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(hbox), file_radio, FALSE, TRUE, 0);
+	g_signal_connect(def_radio, "toggled", G_CALLBACK(radio_cb), (gpointer)FIND_DEF);
+	g_signal_connect(ref_radio, "toggled", G_CALLBACK(radio_cb), (gpointer)FIND_REF);
+	g_signal_connect(sym_radio, "toggled", G_CALLBACK(radio_cb), (gpointer)FIND_SYM);
+	g_signal_connect(file_radio, "toggled", G_CALLBACK(radio_cb), (gpointer)FIND_FILE);
+	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(def_radio), TRUE);
+	gtk_box_pack_start(GTK_BOX(vbox), hbox, FALSE, TRUE, 0);
 
 	gtk_widget_show_all(vbox);
 	gtk_widget_hide(find_dialog.widget);
@@ -223,6 +252,13 @@ void input_cb(find_type_t ft)
 }
 static void show_find_dialog(find_type_t ft)
 {
+	if (ft == FIND_ANY) {
+		gtk_widget_show(find_dialog.radiobox);
+		gtk_toggle_button_set_active(find_dialog.first_button, TRUE);
+	} else {
+		gtk_widget_hide(find_dialog.radiobox);
+		find_dialog.ft = ft;
+	}
 	if (ft != FIND_FILE) {
 		gchar *word = get_current_word();
 		if (word)
@@ -231,7 +267,7 @@ static void show_find_dialog(find_type_t ft)
 	gtk_widget_grab_focus(GTK_WIDGET(find_dialog.entry));
 	gint res = gtk_dialog_run(GTK_DIALOG(find_dialog.widget));
 	if (res == GTK_RESPONSE_ACCEPT) {
-		input_cb(ft);
+		input_cb(find_dialog.ft);
 	}
 	find_dialog_hide();
 }
@@ -245,6 +281,7 @@ static void menu_enable(gboolean enable)
 	gtk_widget_set_sensitive(menu_find_ref, enable);
 	gtk_widget_set_sensitive(menu_find_sym, enable);
 	gtk_widget_set_sensitive(menu_find_file, enable);
+	gtk_widget_set_sensitive(menu_find_any, enable);
 }
 static gboolean kb_callback(guint key_id)
 {
@@ -262,6 +299,11 @@ static gboolean kb_callback(guint key_id)
 			return TRUE;
 		}
 		case FIND_FILE:
+		{
+			on_find(NULL, (gpointer)ft);
+			return TRUE;
+		}
+		case FIND_ANY:
 		{
 			on_find(NULL, (gpointer)ft);
 			return TRUE;
@@ -297,11 +339,17 @@ static void menu_init(void)
 	g_signal_connect(menu_find_sym, "activate", G_CALLBACK(on_find), (gpointer)FIND_SYM);
 	keybindings_set_item(key_group, FIND_SYM, NULL, 0, 0, "find_symbol", "Find Symbol", menu_find_sym);
 
-	menu_find_file = gtk_menu_item_new_with_mnemonic("Find file");
+	menu_find_file = gtk_menu_item_new_with_mnemonic("Find File");
 	gtk_widget_show(menu_find_file);
 	gtk_container_add(GTK_CONTAINER(geany_project_menu), menu_find_file);
 	g_signal_connect(menu_find_file, "activate", G_CALLBACK(on_find), (gpointer)FIND_FILE);
 	keybindings_set_item(key_group, FIND_FILE, NULL, 0, 0, "find_file", "Find File", menu_find_file);
+
+	menu_find_any = gtk_menu_item_new_with_mnemonic("Find Any");
+	gtk_widget_show(menu_find_any);
+	gtk_container_add(GTK_CONTAINER(geany_project_menu), menu_find_any);
+	g_signal_connect(menu_find_any, "activate", G_CALLBACK(on_find), (gpointer)FIND_ANY);
+	keybindings_set_item(key_group, FIND_ANY, NULL, 0, 0, "find_any", "Find Any", menu_find_any);
 
 	menu_enable(FALSE);
 }
@@ -314,6 +362,8 @@ static void menu_clean(void)
 	gtk_widget_destroy(menu_find_ref);
 	gtk_widget_destroy(menu_find_file);
 	gtk_widget_destroy(menu_find_sym);
+	gtk_widget_destroy(menu_find_any);
+	gtk_widget_destroy(find_dialog.widget);
 }
 static gboolean gtags_init(GeanyPlugin *plugin, gpointer pdata)
 {

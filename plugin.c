@@ -222,8 +222,10 @@ void show_tag(gpointer data, gpointer user_data)
 
 	if (ft == FIND_FILE)
 		msgwin_msg_add(COLOR_BLUE, -1, NULL, "%s", tag->file);
-	else
+	else {
+		g_strstrip(tag->text);
 		msgwin_msg_add(COLOR_BLUE, -1, NULL, "%s:%d\n%s", tag->file, tag->line, tag->text);
+	}
 }
 void input_cb(find_type_t ft)
 {

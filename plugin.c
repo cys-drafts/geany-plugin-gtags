@@ -220,11 +220,15 @@ void show_tag(gpointer data, gpointer user_data)
 	struct tag *tag = (struct tag *)data;
 	find_type_t ft = (find_type_t)user_data;
 
-	if (ft == FIND_FILE)
+	if (ft == FIND_FILE) {
 		msgwin_msg_add(COLOR_BLUE, -1, NULL, "%s", tag->file);
-	else {
+	} else {
 		g_strstrip(tag->text);
 		msgwin_msg_add(COLOR_BLUE, -1, NULL, "%s:%d\n%s", tag->file, tag->line, tag->text);
+		if (ft == JUMP_ANY) {
+			/* jump directly to the tag if only one match */
+			keybindings_send_command(GEANY_KEY_GROUP_SEARCH, GEANY_KEYS_SEARCH_NEXTMESSAGE);
+		}
 	}
 }
 void input_cb(find_type_t ft)

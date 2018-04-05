@@ -98,7 +98,10 @@ static void tag_stdout_cb(GString *string, GIOCondition condition, gpointer data
 static void tag_exit_cb(GPid pid, gint status, gpointer user_data)
 {
 	if (SPAWN_WIFEXITED(status) && (SPAWN_WEXITSTATUS(status) == 0)) {
-		g_slist_foreach(runtime.result, (GFunc)user_data, (gpointer)FIND_DEF);
+		if (g_slist_length(runtime.result) == 1)
+			((GFunc)user_data)(g_slist_nth_data(runtime.result, 0), (gpointer)JUMP_ANY);
+		else
+			g_slist_foreach(runtime.result, (GFunc)user_data, (gpointer)FIND_DEF);
 		//printf("exited normally\n");
 	}
 	runtime.pid = 0;

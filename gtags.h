@@ -17,6 +17,7 @@ typedef enum {
 	FIND_SYM,
 	FIND_FILE,
 	FIND_ANY,
+	JUMP_ANY,
 	FIND_N,
 } find_type_t;
 

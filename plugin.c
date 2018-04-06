@@ -228,6 +228,7 @@ void show_tag(gpointer data, gpointer user_data)
 		if (ft == JUMP_ANY) {
 			/* jump directly to the tag if only one match */
 			keybindings_send_command(GEANY_KEY_GROUP_SEARCH, GEANY_KEYS_SEARCH_NEXTMESSAGE);
+			keybindings_send_command(GEANY_KEY_GROUP_FOCUS, GEANY_KEYS_FOCUS_EDITOR);
 		}
 	}
 }
